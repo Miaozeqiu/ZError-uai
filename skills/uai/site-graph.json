@@ -1,0 +1,20 @@
+{
+  "id": "uai",
+  "name": "U校园 AI 版",
+  "host": "uai.unipus.cn",
+  "hostPattern": "^https://uai\\.unipus\\.cn(?:/|$)",
+  "notes": ["以当前页面和宿主授权为准；课程与章节路由待实测后补充。"],
+  "nodes": [
+    {
+      "id": "home", "title": "官网入口", "path": "/",
+      "summary": "U校园 AI 版入口；先读取当前标题、导航和登录状态。",
+      "row": 0, "col": 0, "patterns": ["^https://uai\\.unipus\\.cn/(?:portal/?)?(?:[?#].*)?$"]
+    },
+    {
+      "id": "login", "title": "登录", "path": "/portal/sso/login",
+      "summary": "官网公开的统一登录路由；使用安全凭据表单，实际控件待验证。",
+      "row": 0, "col": 1, "patterns": ["/(?:portal/)?sso/login(?:[/?#]|$)"]
+    }
+  ],
+  "edges": [{ "from": "home", "to": "login", "label": "页面登录入口", "kind": "forward" }]
+}

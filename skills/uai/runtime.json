@@ -1,0 +1,105 @@
+{
+  "automations": [],
+  "apiVersion": 2,
+  "bundle": {
+    "code": "var ZErrorSitePackage=(()=>{var l=Object.defineProperty;var g=Object.getOwnPropertyDescriptor;var h=Object.getOwnPropertyNames;var p=Object.prototype.hasOwnProperty;var w=(e,r)=>{for(var t in r)l(e,t,{get:r[t],enumerable:true})};var b=(e,r,t,o)=>{if(r&&typeof r===\"object\"||typeof r===\"function\"){for(let s of h(r))if(!p.call(e,s)&&s!==t)l(e,s,{get:()=>r[s],enumerable:!(o=g(r,s))||o.enumerable})}return e};var x=e=>b(l({},\"__esModule\",{value:true}),e);var I={};w(I,{create:()=>E});var y=e=>/^https:\\/\\/uai\\.unipus\\.cn(?:\\/|$)/.test(String(e||\"\"));var u=e=>String(e||\"\").replace(/\\s+/g,\" \").trim().slice(0,240);function*m(e,r={}){const t=yield{op:e,args:r};if(!t||t.ok===false||t.error||t.denied){throw new Error(\"\\u8BFB\\u53D6 U\\u6821\\u56ED\\u9875\\u9762\\u5931\\u8D25\\uFF0C\\u8BF7\\u6839\\u636E\\u5BBF\\u4E3B\\u56DE\\u6267\\u5904\\u7406\\u540E\\u91CD\\u65B0\\u89C2\\u5BDF\")}return t}function*E({tool:e,args:r={}}){if(e!==\"inspect\")throw new Error(\"\\u672A\\u77E5 U\\u6821\\u56ED\\u5DE5\\u5177\");const t=r.limit??12,o=r.offset??0;if(!Number.isInteger(t)||t<1||t>24||!Number.isInteger(o)||o<0||o>1e4){throw new Error(\"\\u9875\\u9762\\u8BFB\\u53D6\\u8303\\u56F4\\u65E0\\u6548\")}const s=yield*m(\"document.list\");const a=(s.documents||[]).filter(i=>y(i.url)).slice(0,4);if(!a.length)throw new Error(\"\\u5F53\\u524D\\u6CA1\\u6709 U\\u6821\\u56ED AI \\u7248\\u6388\\u6743\\u9875\\u9762\\uFF0C\\u8BF7\\u5148\\u6253\\u5F00\\u5B98\\u7F51\");const f=[];for(const i of a){const c=yield*m(\"document.query\",{document:i,selector:'title,h1,h2,h3,a[href],[role=\"tab\"],button',limit:t,offset:o});const d=(c.nodes||[]).slice(0,t).filter(n=>(n.visible||n.tag===\"title\")&&u(n.text)).map(n=>({tag:u(n.tag),text:u(n.text),selector:String(n.selector||\"\").slice(0,1024)}));f.push({url:i.url,items:d,total:c.total,truncated:Boolean(c.truncated)})}return{status:\"observed\",message:\"\\u5DF2\\u8BFB\\u53D6\\u5F53\\u524D\\u9875\\u9762\\uFF1B\\u8BF7\\u7ED3\\u5408\\u7528\\u6237\\u76EE\\u6807\\u548C\\u771F\\u5B9E\\u63A7\\u4EF6\\u7EE7\\u7EED\\u64CD\\u4F5C\\u3002\",pages:f}}return x(I);})();\n",
+    "sha256": "227f58d266e460368fbb0a6c898f6e52972710a30d23f14963dd8acf78c966f8"
+  },
+  "tools": [
+    {
+      "name": "inspect",
+      "description": "只读识别当前 U校园 AI 版网页中的标题、导航和按钮；每个授权文档最多 24 项、最多四个文档。不读取输入框值，不登录或提交，也不根据界面猜测任务完成。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "observed"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "selector": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "text",
+                      "selector"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 24
+                },
+                "total": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "url",
+                "items",
+                "total",
+                "truncated"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 4
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "pages"
+        ],
+        "additionalProperties": false
+      },
+      "commands": [
+        "document.list",
+        "document.query"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "zerror-uai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "build": "node scripts/build-scripts.mjs",
+    "build:publish": "node scripts/build-scripts.mjs --publish",
+    "dev": "node scripts/build-scripts.mjs --serve",
+    "test": "node scripts/validate.mjs && npm run build && node --test scripts/*.test.mjs"
+  },
+  "devDependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "ajv": "8.18.0",
+    "esbuild": "0.25.5",
+    "quickjs-emscripten-core": "0.32.0"
+  }
+}

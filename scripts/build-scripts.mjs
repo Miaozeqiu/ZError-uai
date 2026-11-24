@@ -1,0 +1,81 @@
+import { createHash } from 'node:crypto'
+import { build, context } from 'esbuild'
+import { mkdir, readFile, readdir, rename, writeFile, rm } from 'node:fs/promises'
+import { basename, resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
+import { fileURLToPath } from 'node:url'
+import { createServer } from 'node:http'
+
+const root = fileURLToPath(new URL('../', import.meta.url)), out = resolve(root, 'dist')
+const site = 'uai', skill = resolve(root, 'skills', site)
+const publish = process.argv.includes('--publish'), serve = process.argv.includes('--serve')
+const digest = bytes => createHash('sha256').update(bytes).digest('hex')
+let current
+async function atomic(path, bytes) {
+  await mkdir(resolve(path, '..'), { recursive: true })
+  const temp = `${path}.${process.pid}.tmp`; await writeFile(temp, bytes); await rename(temp, path)
+}
+async function experience(runtime) {
+  const website = JSON.parse(await readFile(resolve(skill, 'website.json'), 'utf8'))
+  const refs = (await readdir(resolve(skill, 'references'))).filter(name => /^[\w-]+\.md$/.test(name)).sort().map(name => 'references/' + name)
+  const paths = ['SKILL.md', 'site-graph.json', ...refs]
+  const files = Object.fromEntries(await Promise.all(paths.map(async path => [path, await readFile(resolve(skill, path), 'utf8')])))
+  const icon = { path: website.icon, dataUrl: 'data:image/png;base64,' + (await readFile(resolve(skill, website.icon))).toString('base64') }
+  const data = { website, files, icon, runtime }
+  return { ...data, revision: digest(JSON.stringify(data)) }
+}
+const options = {
+  absWorkingDir: root, entryPoints: { runtime: 'src/runtime/index.js', metadata: 'zerror-runtime-metadata' }, outdir: out, bundle: true, format: 'iife', globalName: 'ZErrorSitePackage',
+  // QuickJS 0.32 对 for-of 表达式中的 yield* 有限制，保留经过验证的语句布局。
+  target: 'es2020', write: false, minifyWhitespace: true, minifyIdentifiers: true, minifySyntax: false, legalComments: 'none',
+  plugins: [{ name: 'runtime-artifact', setup(builder) {
+    // 同一次构建固定工具元数据与可执行产物，避免热更新时出现版本错配。
+    builder.onResolve({ filter: /^zerror-runtime-metadata$/ }, () => ({ path: 'metadata', namespace: 'runtime-metadata' }))
+    builder.onLoad({ filter: /.*/, namespace: 'runtime-metadata' }, () => ({
+      contents: "export {tools} from './src/runtime/tools.js'; export {automations} from './src/runtime/rules.js';",
+      resolveDir: root, loader: 'js',
+    }))
+    builder.onEnd(async result => {
+      if (result.errors.length) return
+      const code = result.outputFiles.find(file => basename(file.path) === 'runtime.js').text
+      const metadata = result.outputFiles.find(file => basename(file.path) === 'metadata.js').text
+      const { tools, automations } = JSON.parse(runInNewContext(metadata + ';JSON.stringify({tools:ZErrorSitePackage.tools,automations:ZErrorSitePackage.automations})', Object.create(null), { timeout: 1000 }))
+      const runtime = { automations, apiVersion: 2, bundle: { code, sha256: digest(code) }, tools }
+      if (Buffer.byteLength(code) > 256 * 1024 || Buffer.byteLength(JSON.stringify(tools)) > 64 * 1024) throw new Error('Runtime artifact exceeds host limits')
+      const bytes = JSON.stringify(runtime, null, 2) + '\n'
+      await mkdir(out, { recursive: true })
+      await atomic(resolve(out, 'runtime.json'), bytes)
+      await atomic(resolve(out, 'experience.json'), JSON.stringify(await experience(runtime), null, 2) + '\n')
+      if (publish) await atomic(resolve(skill, 'runtime.json'), bytes)
+      current = runtime
+      console.log(`${site} host API 2 ${runtime.bundle.sha256.slice(0, 12)} (${Buffer.byteLength(code)} bytes)`)
+    })
+  } }],
+}
+// 只分发一种编译格式，不保留旧版脚本清单。
+await rm(resolve(out, 'script-manifest.json'), { force: true })
+await rm(resolve(out, 'scripts'), { force: true, recursive: true })
+if (!serve) await build(options)
+else {
+  const builder = await context(options)
+  try { await builder.rebuild(); await builder.watch() } catch (error) { await builder.dispose(); throw error }
+  const server = createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url, 'http://localhost')
+      if (req.method !== 'GET' || !['/experience.json', '/runtime.json'].includes(url.pathname)) return res.writeHead(404).end()
+
+      if (!current) return res.writeHead(503).end()
+      // 文档按请求读取；固定当前编译包，保证单次快照内部一致。
+      const runtime = current
+      const bytes = JSON.stringify(url.pathname === '/runtime.json' ? runtime : await experience(runtime))
+      const etag = `"${digest(bytes)}"`
+      res.setHeader('ETag', etag); res.setHeader('Cache-Control', 'no-cache')
+      if (req.headers['if-none-match'] === etag) return res.writeHead(304).end()
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(bytes)
+    } catch { res.writeHead(500).end(JSON.stringify({ error: 'Unable to read website runtime' })) }
+  })
+  server.listen(Number(process.env.ZERROR_SCRIPT_PORT || 8819), '127.0.0.1', () => console.log(`http://127.0.0.1:${server.address().port}/experience.json`))
+  const stop = async () => { server.close(); await builder.dispose() }
+  server.once('error', async error => { console.error(error.message); await stop(); process.exitCode = 1 })
+  for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, stop)
+}
